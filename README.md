@@ -194,7 +194,7 @@ FATSECRET_CLIENT_ID='...' FATSECRET_CLIENT_SECRET='...' FATSECRET_CONSUMER_SECRE
 
 ## 🌐 Remote deployment (HTTP + API key)
 
-Besides stdio, the server can be exposed over Streamable HTTP (e.g. on Vercel) at `/api/mcp`. Every request must carry an API key, otherwise it gets a `401`.
+Besides stdio, the server can be exposed over Streamable HTTP (e.g. on Vercel) at `/mcp`. Every request must carry an API key, otherwise it gets a `401`.
 
 | Variable | Description |
 |---|---|
@@ -211,7 +211,7 @@ Clients send the key as `Authorization: Bearer <key>` or `X-API-Key: <key>`:
 {
   "mcpServers": {
     "fatsecret": {
-      "url": "https://<your-deployment>.vercel.app/api/mcp",
+      "url": "https://<your-deployment>.vercel.app/mcp",
       "headers": { "Authorization": "Bearer <key>" }
     }
   }

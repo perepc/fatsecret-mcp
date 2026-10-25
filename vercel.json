@@ -2,5 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": "",
-  "outputDirectory": null
+  "outputDirectory": null,
+  "rewrites": [{ "source": "/mcp", "destination": "/api/mcp" }]
 }
