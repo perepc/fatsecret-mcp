@@ -192,6 +192,32 @@ FATSECRET_CLIENT_ID='...' FATSECRET_CLIENT_SECRET='...' FATSECRET_CONSUMER_SECRE
 - FatSecret Platform API account ([platform.fatsecret.com](https://platform.fatsecret.com/))
 - MCP-compatible client (Claude Desktop, Cursor, etc.)
 
+## 🌐 Remote deployment (HTTP + API key)
+
+Besides stdio, the server can be exposed over Streamable HTTP (e.g. on Vercel) at `/api/mcp`. Every request must carry an API key, otherwise it gets a `401`.
+
+| Variable | Description |
+|---|---|
+| `MCP_API_KEYS` | Comma-separated list of accepted keys (generate with `openssl rand -hex 32`). If unset, all requests are rejected. |
+| `FATSECRET_CLIENT_ID`, `FATSECRET_CLIENT_SECRET`, `FATSECRET_CONSUMER_SECRET` | FatSecret credentials. |
+| `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Redis REST store (Upstash via Vercel Marketplace injects these). Persists the OAuth 1.0 user tokens between invocations. |
+| `FATSECRET_ACCESS_TOKEN`, `FATSECRET_ACCESS_TOKEN_SECRET` | Optional: OAuth 1.0 user tokens set by hand; they take precedence over the store. |
+
+With the Redis store configured, profile authorization works remotely: call `start_auth`, open the URL, then `complete_auth` with the PIN. The tokens are saved in Redis and reused. `setup_credentials` is disabled in this mode (use the env vars above). If you change the FatSecret credentials, redo `start_auth`/`complete_auth`.
+
+Clients send the key as `Authorization: Bearer <key>` or `X-API-Key: <key>`:
+
+```json
+{
+  "mcpServers": {
+    "fatsecret": {
+      "url": "https://<your-deployment>.vercel.app/api/mcp",
+      "headers": { "Authorization": "Bearer <key>" }
+    }
+  }
+}
+```
+
 ## 🔧 Development
 
 1. Clone the repository
