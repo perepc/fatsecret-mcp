@@ -61,7 +61,10 @@ export class FatSecretMcpServer {
   private oauth1Credentials: OAuth1Credentials;
   private pendingOAuth: { token: string; secret: string } | null = null;
 
-  constructor(private store: TokenStore | null = null) {
+  constructor(
+    private store: TokenStore | null = null,
+    private authCallbackUrl: string | null = null,
+  ) {
     this.oauth1Credentials = { consumerKey: '', consumerSecret: '' };
 
     // Load config: persistent file first, env vars override
@@ -985,15 +988,18 @@ export class FatSecretMcpServer {
       async () => {
         this.ensureApiCredentials();
         // Use only consumer key/secret for request token (no access tokens)
+        const callback = this.store && this.authCallbackUrl ? this.authCallbackUrl : undefined;
         const result = await requestToken({
           consumerKey: this.oauth1Credentials.consumerKey,
           consumerSecret: this.oauth1Credentials.consumerSecret,
-        });
+        }, callback);
         this.pendingOAuth = { token: result.oauthToken, secret: result.oauthTokenSecret };
         // Serverless: complete_auth runs in a different invocation, so keep the request token in the store
         await this.store?.set(OAUTH1_PENDING_KEY, JSON.stringify(this.pendingOAuth), PENDING_TTL_SECONDS);
         return text({
-          message: 'Visit the URL below to authorize the app, then use complete_auth with the verifier code.',
+          message: callback
+            ? 'Visit the URL below and authorize the app. Authentication finishes automatically when FatSecret redirects back; then call check_auth_status.'
+            : 'Visit the URL below to authorize the app, then use complete_auth with the verifier code.',
           authorization_url: result.authorizationUrl,
         });
       },
@@ -1007,33 +1013,46 @@ export class FatSecretMcpServer {
         annotations: { readOnlyHint: false, idempotentHint: false },
       },
       async ({ verifier }) => {
-        if (!this.pendingOAuth && this.store) {
-          const raw = await this.store.get(OAUTH1_PENDING_KEY);
-          if (raw) this.pendingOAuth = JSON.parse(raw) as { token: string; secret: string };
-        }
-        if (!this.pendingOAuth) {
-          throw new Error('No pending OAuth flow. Call start_auth first.');
-        }
-        const result = await accessToken(
-          this.oauth1Credentials,
-          this.pendingOAuth.token,
-          this.pendingOAuth.secret,
-          verifier,
-        );
-        if (this.store) {
-          await this.store.set(OAUTH1_TOKENS_KEY, JSON.stringify(result));
-        } else {
-          this.saveConfig({ accessToken: result.accessToken, accessTokenSecret: result.accessTokenSecret });
-        }
-        this.oauth1Credentials.accessToken = result.accessToken;
-        this.oauth1Credentials.accessTokenSecret = result.accessTokenSecret;
-        this.pendingOAuth = null;
+        await this.finishAuth(verifier);
         return text({
           message: 'Authentication successful! Profile tools are now available.',
           config_path: this.store ? undefined : this.getConfigPath(),
         });
       },
     );
+  }
+
+  private async finishAuth(verifier: string, expectedToken?: string): Promise<void> {
+    if (!this.pendingOAuth && this.store) {
+      const raw = await this.store.get(OAUTH1_PENDING_KEY);
+      if (raw) this.pendingOAuth = JSON.parse(raw) as { token: string; secret: string };
+    }
+    if (!this.pendingOAuth) {
+      throw new Error('No pending OAuth flow. Call start_auth first.');
+    }
+    if (expectedToken && expectedToken !== this.pendingOAuth.token) {
+      throw new Error('Unknown or expired authorization request. Call start_auth again.');
+    }
+    const result = await accessToken(
+      this.oauth1Credentials,
+      this.pendingOAuth.token,
+      this.pendingOAuth.secret,
+      verifier,
+    );
+    if (this.store) {
+      await this.store.set(OAUTH1_TOKENS_KEY, JSON.stringify(result));
+      await this.store.delete(OAUTH1_PENDING_KEY);
+    } else {
+      this.saveConfig({ accessToken: result.accessToken, accessTokenSecret: result.accessTokenSecret });
+    }
+    this.oauth1Credentials.accessToken = result.accessToken;
+    this.oauth1Credentials.accessTokenSecret = result.accessTokenSecret;
+    this.pendingOAuth = null;
+  }
+
+  /** Called by the HTTP callback endpoint after FatSecret redirects the user back. */
+  async completeAuthFromCallback(oauthToken: string, verifier: string): Promise<void> {
+    await this.finishAuth(verifier, oauthToken);
   }
 
   // ── Run ──

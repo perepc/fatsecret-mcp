@@ -2,6 +2,7 @@
 export interface TokenStore {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ttlSeconds?: number): Promise<void>;
+  delete(key: string): Promise<void>;
 }
 
 /** Redis over the Upstash REST API (what Vercel Marketplace Redis/KV provides). */
@@ -30,6 +31,10 @@ export class RestRedisStore implements TokenStore {
 
   async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
     await this.command(ttlSeconds ? ['SET', key, value, 'EX', ttlSeconds] : ['SET', key, value]);
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.command(['DEL', key]);
   }
 }
 

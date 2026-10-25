@@ -203,7 +203,7 @@ Besides stdio, the server can be exposed over Streamable HTTP (e.g. on Vercel) a
 | `KV_REST_API_URL`, `KV_REST_API_TOKEN` | Redis REST store (Upstash via Vercel Marketplace injects these). Persists the OAuth 1.0 user tokens between invocations. |
 | `FATSECRET_ACCESS_TOKEN`, `FATSECRET_ACCESS_TOKEN_SECRET` | Optional: OAuth 1.0 user tokens set by hand; they take precedence over the store. |
 
-With the Redis store configured, profile authorization works remotely: call `start_auth`, open the URL, then `complete_auth` with the PIN. The tokens are saved in Redis and reused. `setup_credentials` is disabled in this mode (use the env vars above). If you change the FatSecret credentials, redo `start_auth`/`complete_auth`.
+With the Redis store configured, profile authorization works remotely: call `start_auth`, open the URL and authorize. FatSecret redirects to `/auth/callback`, which finishes the flow automatically (set `PUBLIC_BASE_URL` if the callback host differs from the request host). If the redirect doesn't work, `complete_auth` with the verifier still works. The tokens are saved in Redis and reused. `setup_credentials` is disabled in this mode (use the env vars above). If you change the FatSecret credentials, redo `start_auth`/`complete_auth`.
 
 Clients send the key as `Authorization: Bearer <key>` or `X-API-Key: <key>`:
 

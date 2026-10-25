@@ -85,8 +85,9 @@ export function buildOAuth1Params(
 
 export async function requestToken(
   credentials: OAuth1Credentials,
+  callbackUrl = 'oob',
 ): Promise<OAuth1RequestTokenResult> {
-  const params = buildOAuth1Params('GET', REQUEST_TOKEN_URL, credentials, { oauth_callback: 'oob' });
+  const params = buildOAuth1Params('GET', REQUEST_TOKEN_URL, credentials, { oauth_callback: callbackUrl });
   const qs = new URLSearchParams(params).toString();
 
   const response = await fetch(`${REQUEST_TOKEN_URL}?${qs}`, {
