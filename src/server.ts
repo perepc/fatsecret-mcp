@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -232,7 +232,7 @@ export class FatSecretMcpServer {
         grant_type: 'client_credentials',
         client_id: this.clientId,
         client_secret: this.clientSecret,
-        scope: 'basic',
+        scope: 'basic premier',
       }),
     });
 
@@ -996,6 +996,11 @@ export class FatSecretMcpServer {
         this.pendingOAuth = { token: result.oauthToken, secret: result.oauthTokenSecret };
         // Serverless: complete_auth runs in a different invocation, so keep the request token in the store
         await this.store?.set(OAUTH1_PENDING_KEY, JSON.stringify(this.pendingOAuth), PENDING_TTL_SECONDS);
+        if (!this.store) {
+          // Local stdio: complete_auth may run in a different process, so persist the pending token to a 0600 file
+          mkdirSync(join(homedir(), '.fatsecret-mcp'), { recursive: true, mode: 0o700 });
+          writeFileSync(join(homedir(), '.fatsecret-mcp', 'pending.json'), JSON.stringify({ ...this.pendingOAuth, at: Date.now() }), { mode: 0o600 });
+        }
         return text({
           message: callback
             ? 'Visit the URL below and authorize the app. Authentication finishes automatically when FatSecret redirects back; then call check_auth_status.'
@@ -1027,6 +1032,13 @@ export class FatSecretMcpServer {
       const raw = await this.store.get(OAUTH1_PENDING_KEY);
       if (raw) this.pendingOAuth = JSON.parse(raw) as { token: string; secret: string };
     }
+    if (!this.pendingOAuth && !this.store) {
+      const f = join(homedir(), '.fatsecret-mcp', 'pending.json');
+      if (existsSync(f)) {
+        const d = JSON.parse(readFileSync(f, 'utf8')) as { token: string; secret: string; at: number };
+        if (Date.now() - d.at < PENDING_TTL_SECONDS * 1000) this.pendingOAuth = { token: d.token, secret: d.secret };
+      }
+    }
     if (!this.pendingOAuth) {
       throw new Error('No pending OAuth flow. Call start_auth first.');
     }
@@ -1048,6 +1060,7 @@ export class FatSecretMcpServer {
     this.oauth1Credentials.accessToken = result.accessToken;
     this.oauth1Credentials.accessTokenSecret = result.accessTokenSecret;
     this.pendingOAuth = null;
+    try { unlinkSync(join(homedir(), '.fatsecret-mcp', 'pending.json')); } catch { /* none */ }
   }
 
   /** Called by the HTTP callback endpoint after FatSecret redirects the user back. */
